@@ -1,24 +1,49 @@
-import redis from "../../shared/redis/redis.js"
+import redis from "../../shared/redis/redis.js";
 
 const protect = async (req, res, next) => {
     try {
-        const sessionId = req.cookies?.session
+        console.log("AUTH MIDDLEWARE CALLED");
+
+        const sessionId = req.cookies.sessionId;
+
+        console.log("Cookies:", req.cookies);
+        console.log("Session ID:", sessionId);
 
         if (!sessionId) {
-            return res.status(400).json({ message: "unauthorized" })
+            return res.status(401).json({
+                message: "Unauthorized - no session"
+            });
         }
 
-        const session = await redis.get(`session-${sessionId}`)
+        console.log("Checking Redis...");
+
+        const session = await redis.get(`session-${sessionId}`);
+
+        console.log("Redis session:", session);
 
         if (!session) {
-            return res.status(400).json({ message: "session expired" })
+            return res.status(401).json({
+                message: "Unauthorized - session not found"
+            });
         }
 
-        req.user = JSON.parse(session)
+        const user = JSON.parse(session);
 
-        next()
+        console.log("USER FOUND:", user);
+
+        req.user = user;
+
+        console.log("CALLING NEXT");
+
+        return next();
 
     } catch (error) {
-        return res.status(500).json({ message: `protect error ${error}` })
+        console.error("AUTH MIDDLEWARE ERROR:", error);
+
+        return res.status(500).json({
+            message: "Authentication middleware error"
+        });
     }
-}
+};
+
+export default protect;

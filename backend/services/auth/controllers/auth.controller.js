@@ -56,7 +56,7 @@ export const login = async (req, res) => {
 
 export const logOut = async(req,res) => {
     try{
-        const sessionId=req.cookies?.session
+        const sessionId=req.cookies?.sessionId
         await redis.del(`session-${sessionId}`)
         res.clearCookie("sessionId")
         return res.status(200).json({
@@ -75,13 +75,13 @@ export const logOut = async(req,res) => {
 
 export const getCurrentUser = async(req,res)=>{
     try{
-        
+        return res.status(200).json(req.user)
     }
     catch(error){
-        console.error("LOGOUT ERROR:", error)
+        console.error("GET CURRENT USER ERROR:", error)
 
         return res.status(500).json({
-            message: `logout error ${error.message}`
+            message: `get current user error ${error.message}`
         })
     }
 }
