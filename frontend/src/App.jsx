@@ -1,20 +1,24 @@
 import { useEffect } from "react"
 import Home from "./pages/Home"
 import getCurrentUser from "./features/getCurrentUser"
+import { useDispatch } from "react-redux"
+import { setUserData } from "./redux/userSlice"
 
 function App() {
+    const dispatch = useDispatch()
 
-  useEffect(() => {
+    useEffect(() => {
+        const getUser = async () => {
+            const data = await getCurrentUser()
+            if (data) {
+                dispatch(setUserData(data))
+            }
+        }
 
-    const getUser = async () => {
-      await getCurrentUser()
-    }
+        getUser()
+    }, [dispatch])
 
-    getUser()
-
-  }, [])
-
-  return <Home />
+    return <Home />
 }
 
 export default App

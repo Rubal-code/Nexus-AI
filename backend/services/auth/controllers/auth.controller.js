@@ -4,15 +4,26 @@ import { app } from "../config/firebase.js"
 import crypto from "crypto"
 import redis from "../../../shared/redis/redis.js"
 
+const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+
+const toPublicUser = (user) => ({
+    userId: String(user._id),
+    name: user.name,
+    email: user.email,
+    avatar: user.avatar
+})
+
 export const login = async (req, res) => {
     try {
         const { token } = req.body
 
-        console.log("Login request received")
+        if (!token) {
+            return res.status(400).json({
+                message: "Firebase token is required"
+            })
+        }
 
         const decoded = await getAuth(app).verifyIdToken(token)
-
-        console.log("Firebase token verified:", decoded.email)
 
         let user = await User.findOne({
             firebaseUid: decoded.uid
@@ -27,23 +38,25 @@ export const login = async (req, res) => {
             })
         }
 
+        const publicUser = toPublicUser(user)
         const sessionId = crypto.randomUUID()
-        await redis.set(`session-${sessionId}` , JSON.stringify({
-            userId:user._id,
-            name:user.name,
-            email:user.email,
-            avatar:user.avatar
-        }),"EX",7*24*60*60)
+
+        await redis.set(
+            `session-${sessionId}`,
+            JSON.stringify(publicUser),
+            "EX",
+            SESSION_TTL_SECONDS
+        )
 
         res.cookie("sessionId", sessionId, {
             httpOnly: true,
             secure: false,
-            sameSite: "strict",
-            maxAge: 7 * 24 * 60 * 60 * 1000
+            sameSite: "lax",
+            path: "/",
+            maxAge: SESSION_TTL_SECONDS * 1000
         })
 
-        return res.status(200).json(user)
-
+        return res.status(200).json(publicUser)
     } catch (error) {
         console.error("LOGIN ERROR:", error)
 
@@ -53,35 +66,25 @@ export const login = async (req, res) => {
     }
 }
 
+export const logOut = async (req, res) => {
+    try {
+        const sessionId = req.cookies?.sessionId
 
-export const logOut = async(req,res) => {
-    try{
-        const sessionId=req.cookies?.sessionId
-        await redis.del(`session-${sessionId}`)
-        res.clearCookie("sessionId")
+        if (sessionId) {
+            await redis.del(`session-${sessionId}`)
+        }
+
+        res.clearCookie("sessionId", { path: "/" })
+
         return res.status(200).json({
-            success:true,
-            message:"Logged out successfully"
+            success: true,
+            message: "Logged out successfully"
         })
-    }
-    catch(error){
+    } catch (error) {
         console.error("LOGOUT ERROR:", error)
 
         return res.status(500).json({
             message: `logout error ${error.message}`
-        })
-    }
-}
-
-export const getCurrentUser = async(req,res)=>{
-    try{
-        return res.status(200).json(req.user)
-    }
-    catch(error){
-        console.error("GET CURRENT USER ERROR:", error)
-
-        return res.status(500).json({
-            message: `get current user error ${error.message}`
         })
     }
 }

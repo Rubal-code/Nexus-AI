@@ -1,29 +1,36 @@
+import "./loadEnv.js"
 import express from "express"
-import dotenv from "dotenv"
 import proxy from "express-http-proxy"
 import cors from "cors"
 import cookieParser from "cookie-parser"
 
 import { getCurrentUser } from "./controllers/user.controller.js"
-import protect from "./middleware/auth.middleware.js"
+import { optionalAuth } from "./middleware/auth.middleware.js"
 
-dotenv.config()
+const port = process.env.PORT || 8000
+const authService = process.env.AUTH_SERVICE || "http://localhost:8001"
+const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173"
 
-const port=process.env.PORT 
+const app = express()
 
-const app=express()
 app.use(cors({
-    origin:process.env.FRONTEND_URL,
-    credentials:true
+    origin: frontendUrl,
+    credentials: true
 }))
 
 app.use(cookieParser())
-app.use("/api/auth",proxy(process.env.AUTH_SERVICE))
-app.get("/api/me",protect,getCurrentUser)
-app.get("/",(req,res)=>{
-    res.json({message:"Gateway is running"})
+
+app.use("/api/auth", proxy(authService, {
+    parseReqBody: false,
+    proxyReqPathResolver: (req) => req.url
+}))
+
+app.get("/api/me", optionalAuth, getCurrentUser)
+
+app.get("/", (req, res) => {
+    res.json({ message: "Gateway is running" })
 })
 
-app.listen(port,()=>{
+app.listen(port, () => {
     console.log(`Gateway is running at port ${port}`)
 })

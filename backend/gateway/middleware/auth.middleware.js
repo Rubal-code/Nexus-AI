@@ -1,49 +1,57 @@
-import redis from "../../shared/redis/redis.js";
+import redis from "../../shared/redis/redis.js"
 
 const protect = async (req, res, next) => {
     try {
-        console.log("AUTH MIDDLEWARE CALLED");
-
-        const sessionId = req.cookies.sessionId;
-
-        console.log("Cookies:", req.cookies);
-        console.log("Session ID:", sessionId);
+        const sessionId = req.cookies?.sessionId
 
         if (!sessionId) {
             return res.status(401).json({
                 message: "Unauthorized - no session"
-            });
+            })
         }
 
-        console.log("Checking Redis...");
-
-        const session = await redis.get(`session-${sessionId}`);
-
-        console.log("Redis session:", session);
+        const session = await redis.get(`session-${sessionId}`)
 
         if (!session) {
             return res.status(401).json({
                 message: "Unauthorized - session not found"
-            });
+            })
         }
 
-        const user = JSON.parse(session);
-
-        console.log("USER FOUND:", user);
-
-        req.user = user;
-
-        console.log("CALLING NEXT");
-
-        return next();
-
+        req.user = JSON.parse(session)
+        return next()
     } catch (error) {
-        console.error("AUTH MIDDLEWARE ERROR:", error);
+        console.error("AUTH MIDDLEWARE ERROR:", error)
 
         return res.status(500).json({
             message: "Authentication middleware error"
-        });
+        })
     }
-};
+}
 
-export default protect;
+export const optionalAuth = async (req, res, next) => {
+    try {
+        const sessionId = req.cookies?.sessionId
+
+        if (!sessionId) {
+            req.user = null
+            return next()
+        }
+
+        const session = await redis.get(`session-${sessionId}`)
+
+        if (!session) {
+            req.user = null
+            return next()
+        }
+
+        req.user = JSON.parse(session)
+        return next()
+    } catch (error) {
+        console.error("OPTIONAL AUTH ERROR:", error)
+        req.user = null
+        return next()
+    }
+}
+
+export default protect
