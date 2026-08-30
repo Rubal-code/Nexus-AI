@@ -25,6 +25,8 @@ app.use("/api/auth", proxy(authService, {
     proxyReqPathResolver: (req) => req.url
 }))
 
+app.use("/api/chat",protect,proxyWithHeader(process.env.CHAT_SERVICE))
+
 app.get("/api/me", optionalAuth, getCurrentUser)
 
 app.get("/", (req, res) => {
