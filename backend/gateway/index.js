@@ -26,6 +26,7 @@ app.use("/api/auth", proxy(authService, {
 }))
 
 app.use("/api/chat",protect,proxyWithHeader(process.env.CHAT_SERVICE))
+app.use("/api/agent",protect,proxy(process.env.AGENT_SERVICE))
 
 app.get("/api/me", optionalAuth, getCurrentUser)
 
