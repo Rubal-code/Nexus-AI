@@ -49,3 +49,11 @@ frontend/node_modules/
 
 # Backend dependencies
 backend/**/node_modules/
+
+# Runtime artifact storage (generated images, PDFs, PPTX, previews)
+backend/services/agent/artifacts/
+
+# Smoke / scratch test output
+*.txt.bak
+smoke-out.txt
+smoke-err.txt

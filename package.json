@@ -1,0 +1,13 @@
+{
+  "name": "nexus-ai",
+  "version": "2.0.0",
+  "description": "Nexus AI — Multi-Agent Workspace & Chat Application",
+  "type": "module",
+  "scripts": {
+    "start": "node start-all.js",
+    "dev": "node start-all.js"
+  },
+  "keywords": ["ai", "langgraph", "agents", "react", "chat"],
+  "author": "Nexus AI",
+  "license": "ISC"
+}
