@@ -21,6 +21,7 @@ export async function chatNode(state) {
     prompt: contextPrompt,
     history,
     temperature: 0.7,
+    maxOutputTokens: 4096,
   });
 
   let finalOutput = "";

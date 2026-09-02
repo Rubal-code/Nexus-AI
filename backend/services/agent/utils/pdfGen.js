@@ -2,6 +2,13 @@
  * pdfGen.js
  * Generates a real PDF document (pdf-lib) from markdown content produced by
  * the PDF Agent.
+ *
+ * NOTE: pdf-lib's standard fonts only support WinAnsi (Latin-1) encoding.
+ * LLM output frequently contains Unicode symbols (arrows, checkmarks, math
+ * symbols, emoji, non-Latin scripts) that would make `drawText` throw
+ * "WinAnsi cannot encode ...". Every string drawn into the PDF therefore
+ * goes through `sanitizeText()` which maps common symbols to ASCII
+ * equivalents and drops anything the standard fonts cannot encode.
  */
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
@@ -14,13 +21,65 @@ const ACCENT = rgb(79 / 255, 70 / 255, 229 / 255); // Nexus indigo
 const DARK = rgb(15 / 255, 18 / 255, 26 / 255);
 const MUTED = rgb(100 / 255, 116 / 255, 139 / 255);
 
+/** Common Unicode symbols found in LLM output -> ASCII equivalents. */
+const CHAR_MAP = {
+  "\u2192": "->", // →
+  "\u2190": "<-", // ←
+  "\u21d2": "=>", // ⇒
+  "\u2194": "<->", // ↔
+  "\u2264": "<=", // ≤
+  "\u2265": ">=", // ≥
+  "\u2260": "!=", // ≠
+  "\u2248": "~", // ≈
+  "\u221e": "infinity", // ∞
+  "\u2211": "sum", // ∑
+  "\u221a": "sqrt", // √
+  "\u00d7": "x", // ×
+  "\u00f7": "/", // ÷
+  "\u2212": "-", // −
+  "\u2011": "-", // non-breaking hyphen
+  "\u2713": "[yes]", // ✓
+  "\u2714": "[yes]", // ✔
+  "\u2717": "[no]", // ✗
+  "\u2718": "[no]", // ✘
+  "\u00a0": " ", // non-breaking space
+  "\u03b1": "alpha", "\u03b2": "beta", "\u03b3": "gamma", "\u03b4": "delta",
+  "\u03c0": "pi", "\u03bb": "lambda", "\u03bc": "u", "\u03a9": "Omega",
+  "\u2126": "Ohm",
+};
+
+/** Characters WinAnsi standard fonts CAN encode (beyond \x20-\x7E and \xA0-\xFF). */
+const ALLOWED_CHAR =
+  /[\x20-\x7E\xA0-\xFF\u2018\u2019\u201A\u201C\u201D\u201E\u2020\u2021\u2022\u2026\u2030\u2039\u203A\u2013\u2014\u02C6\u02DC\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u20AC\u2122]/;
+
+/**
+ * Make text safe for pdf-lib standard fonts (WinAnsi encoding):
+ * maps known symbols to ASCII and strips everything else (emoji,
+ * CJK, Devanagari, control chars, lone surrogates, etc.).
+ */
+export function sanitizeText(text) {
+  let out = "";
+  for (const ch of String(text || "")) {
+    if (ALLOWED_CHAR.test(ch)) {
+      out += ch;
+      continue;
+    }
+    const mapped = CHAR_MAP[ch];
+    if (mapped) out += mapped;
+    // Anything else (emoji, unsupported scripts, control chars) is dropped.
+  }
+  return out;
+}
+
 /** Strip inline markdown (bold, italics, links, backticks) to plain text. */
 function stripInline(text) {
-  return String(text || "")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/[*_`#>]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return sanitizeText(
+    String(text || "")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/[*_`#>]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 /** Simple markdown block parser. */
@@ -80,7 +139,7 @@ function parseMarkdown(md) {
       const code = [];
       i++;
       while (i < lines.length && !/^\s*```/.test(lines[i])) {
-        code.push(lines[i]);
+        code.push(sanitizeText(lines[i]));
         i++;
       }
       i++;
@@ -176,10 +235,20 @@ export async function generatePdfBuffer(markdown) {
     switch (block.type) {
       case "heading": {
         const size = fontSizes[block.level] || 12;
-        ensureSpace(size + 14);
-        if (block.level === 1) {
-          page.drawText(block.text, { x: MARGIN, y, size, font: bold, color: DARK });
+        // Long headings must be wrapped, otherwise they overflow the page.
+        const headingLines = wrap(block.text, bold, size);
+        ensureSpace(headingLines.length * (size + 8) + 14);
+        for (const hLine of headingLines) {
+          page.drawText(hLine, {
+            x: MARGIN,
+            y,
+            size,
+            font: bold,
+            color: block.level === 1 ? DARK : ACCENT,
+          });
           y -= size + 6;
+        }
+        if (block.level === 1) {
           page.drawLine({
             start: { x: MARGIN, y },
             end: { x: MARGIN + 60, y },
@@ -188,8 +257,7 @@ export async function generatePdfBuffer(markdown) {
           });
           y -= 22;
         } else {
-          page.drawText(block.text, { x: MARGIN, y, size, font: bold, color: ACCENT });
-          y -= size + 12;
+          y -= 6;
         }
         break;
       }
@@ -274,7 +342,9 @@ export async function generatePdfBuffer(markdown) {
       case "table": {
         const [header, ...body] = block.rows;
         if (!header) break;
-        const colWidth = CONTENT_WIDTH / header.length;
+        // Use the widest row so long body rows can't overflow the page.
+        const colCount = Math.max(header.length, ...body.map((r) => r.length));
+        const colWidth = CONTENT_WIDTH / colCount;
         const rowHeight = 24;
         ensureSpace((body.length + 1) * rowHeight + 30);
 
@@ -323,16 +393,17 @@ export async function generatePdfBuffer(markdown) {
     }
   }
 
-  // Footer page numbers
+  // Footer page numbers (pdf-lib has no alignment option, center manually)
   const pages = pdfDoc.getPages();
   pages.forEach((p, idx) => {
-    p.drawText(`Nexus AI  \u00b7  Page ${idx + 1} of ${pages.length}`, {
-      x: PAGE_WIDTH / 2,
+    const label = `Nexus AI  \u00b7  Page ${idx + 1} of ${pages.length}`;
+    const labelWidth = font.widthOfTextAtSize(label, 8);
+    p.drawText(label, {
+      x: (PAGE_WIDTH - labelWidth) / 2,
       y: 24,
       size: 8,
       font,
       color: MUTED,
-      xAlignment: 1,
     });
   });
 

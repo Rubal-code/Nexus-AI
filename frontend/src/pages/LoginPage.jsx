@@ -43,12 +43,15 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#090b10] text-white relative overflow-hidden p-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#090b10] text-white relative overflow-hidden p-4 ambient-mesh animate-aurora">
       {/* Background Decorative Ambient Gradients */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none animate-float-slow" />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/15 rounded-full blur-3xl pointer-events-none animate-float-slow" style={{ animationDelay: "1.6s" }} />
 
-      <div className="relative z-10 w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 items-center bg-[#0f121a]/90 border border-white/[0.08] rounded-3xl p-6 md:p-10 shadow-2xl backdrop-blur-xl">
+      <div
+        data-reveal
+        className="relative z-10 w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 items-center bg-[#0f121a]/90 border border-white/[0.08] rounded-3xl p-6 md:p-10 shadow-2xl backdrop-blur-xl"
+      >
         {/* Left Side: Brand & Value Proposition */}
         <div className="flex flex-col space-y-6">
           <div className="flex items-center gap-3">
@@ -79,7 +82,12 @@ export default function LoginPage() {
             {FEATURES.map((f, idx) => {
               const Icon = f.icon;
               return (
-                <div key={idx} className="flex items-start gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                <div
+                  key={idx}
+                  data-reveal
+                  style={{ transitionDelay: `${180 + idx * 80}ms` }}
+                  className="flex items-start gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] hover:border-indigo-500/20 transition-colors"
+                >
                   <div className="p-1.5 rounded-lg bg-indigo-500/15 text-indigo-400 mt-0.5">
                     <Icon className="w-4 h-4" />
                   </div>
@@ -94,7 +102,11 @@ export default function LoginPage() {
         </div>
 
         {/* Right Side: Sign-in Form Card */}
-        <div className="flex flex-col justify-center bg-[#141824] border border-white/[0.08] rounded-2xl p-6 md:p-8 space-y-6 shadow-xl">
+        <div
+          data-reveal
+          style={{ transitionDelay: "300ms" }}
+          className="flex flex-col justify-center bg-[#141824] border border-white/[0.08] rounded-2xl p-6 md:p-8 space-y-6 shadow-xl"
+        >
           <div className="space-y-1 text-center">
             <h3 className="text-lg font-semibold text-slate-100">Welcome to Nexus AI</h3>
             <p className="text-xs text-slate-400">Sign in with your Google account to access your workspaces and chat history.</p>

@@ -2,48 +2,122 @@
  * Router Agent Node
  * Analyzes the input prompt and determines the appropriate destination agent.
  *
- * Priority order intentionally puts explicitly-requested artifacts
- * (image / pdf / ppt / code-with-preview) ahead of generic chat so that
- * requests like "generate an image of a dog" never fall through to plain
- * text generation.
+ * Matching is *intent-first*: a request is classified by the combination of an
+ * imperative verb + an artifact noun (e.g. "generate" + "slides"), never by a
+ * bare topic noun. This fixes classic false positives:
+ *
+ *   - "Create a PRESENTATION about IMAGE processing"  -> ppt (not imageGen)
+ *   - "Write a REPORT about PICTURE quality"          -> pdf (not imageGen)
+ *   - "Write a poem / essay / email..."               -> chat (not coding)
+ *
+ * A topic-qualifier guard (about / on / for / covering / regarding) blocks
+ * image routing when the word "image/picture" is merely the topic of a slide
+ * deck or report, and creative-writing nouns are excluded from code/doc flows.
  */
+
+// ---- Image intent --------------------------------------------------------
+const IMAGE_NOUNS =
+  /\b(?:image|picture|photo|photograph|portrait|illustration|wallpaper|logo|artwork|banner|thumbnail|avatar|icon|drawing|sketch|gif|meme|poster|painting|character design|concept art)\b/i;
+// Verbs whose object is very likely a picture when an image noun is present.
+const IMAGE_VERBS =
+  /\b(?:generate|create|make|design|produce|animate|illustrate|imagine|envision|show|generate an|create an|make an|produce an)\b/i;
+// Verbs that mean "make a picture" on their own.
+const DRAW_VERBS =
+  /\b(?:draw|drawn|sketch|sketch out|paint|illustrate|render)\b/i;
+// Noun-led phrasing: "a picture of a dog", "logo for my startup".
+const IMAGE_NOUN_LEAD =
+  /^(?:an? |the )?(?:image|picture|photo|photograph|portrait|illustration|logo|wallpaper|sketch|drawing)\b[\s\S]{0,12}?\b(?:of|for)\b/i;
+// A deck/report whose *topic* contains an image word must NOT become imageGen:
+// "presentation about image processing" -> ppt, "report on picture quality" -> pdf.
+const ARTIFACT_LEAD_WITH_TOPIC =
+  /(?:presentation|slides?|slide deck|ppt|pptx|powerpoint|deck|report|document|doc|pdf|white ?paper|essay)\b[\s\S]{0,55}?\b(?:about|on|regarding|concerning|covering|for)\b/i;
+
+// ---- PDF / document intent ----------------------------------------------
+const DOC_NOUNS =
+  /\b(?:pdf|report|whitepaper|white paper|document|doc|blueprint|specification|spec|proposal|memo|memorandum|summary|handbook|manual|guide|briefing|brief|resume|cv|case study|release notes|task sheet|invoice)\b/i;
+const CREATE_VERBS =
+  /\b(?:create|make|generate|build|design|prepare|develop|produce|draft|write|compose|author|compile|assemble|put together|prep)\b/i;
+
+// ---- PPT intent ----------------------------------------------------------
+const PPT_NOUNS =
+  /\b(?:presentation|slides|slide deck|slideware|ppt|pptx|powerpoint|keynote|google slides|deck)\b/i;
+const PPT_LEAD =
+  /^(?:an? |the )?(?:presentation|slide deck|powerpoint|ppt|slides)\b/i;
+
+// ---- Coding intent -------------------------------------------------------
+const LANGUAGES =
+  /\b(?:python|javascript|typescript|jsx|tsx|react|html|css|sql|golang|go\b|java|c\+\+|c#|\bc\b|ruby|php|swift|kotlin|rust|bash|shell|powershell|json|xml|yaml|sass|scss|dart|elixir|haskell|\br\b|matlab|julia|vue|angular|svelte|nextjs|django|flask|express|node|terraform|docker|graphql)\b/i;
+const CODE_NOUNS =
+  /\b(?:code|script|snippet|program|app|application|website|web ?page|web ?app|frontend|dashboard|calculator|todo|to-do list|portfolio|form|bot|api|endpoint|route|server|component|module|class|function|algorithm|regex|query|automation|microservice|extension|cli|library|pipeline|game|animation|landing page|ui|interface|spa|hook|test case|lru cache|sort|crud)\b/i;
+const CODE_VERBS =
+  /\b(?:write|code|build|implement|develop|generate|fix|debug|refactor|optimize|convert|translate|migrate|script|automate|test|define|deploy|configure|integrate)\b/i;
+const WEB_UI_NOUNS =
+  /\b(?:html|css|react|jsx|webpage|web page|website|web app|landing ?page|calculator|dashboard|todo|to-do|portfolio|interface|frontend|spa|component|game|animation|ui|form)\b/i;
+
+// ---- Search intent -------------------------------------------------------
+const SEARCH_INTENT =
+  /\b(?:search|lookup|look up|find online|google|fetch|latest news|breaking news|whats happening|what's happening|current (?:news|events)|trending|research online|summarize the news|live scores|weather (?:in|for)|stock price|who won|score of)\b/i;
+
+// ---- Creative / literary output that must stay in chat --------------------
+const CREATIVE_NOUNS =
+  /\b(?:poem|poetry|essay|story|narrative|novel|article|blog|blog post|newsletter|speech|lyrics|song|screenplay|joke|caption|social media post|social post|content|paragraph|email|letter|message|sms|copy|tweet|headline|slogan|tagline|bio)\b/i;
+
+/** Normalize a prompt for matching: lowercase + collapse whitespace. */
+function normalizePrompt(raw) {
+  return String(raw || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
 export async function routerNode(state) {
   const rawPrompt = state.prompt || "";
-  const prompt = rawPrompt.toLowerCase();
+  const prompt = normalizePrompt(rawPrompt);
 
   let targetAgent = "chat"; // Default fallback
 
+  const hasCreative = CREATIVE_NOUNS.test(prompt);
+  const hasSearchIntent = SEARCH_INTENT.test(prompt) && !hasCreative;
+
+  // ---- Image intent (guarded against topic collisions with decks/reports) ----
   const hasImageIntent =
-    /\b(image|picture|photo|draw|illustration|generate .*image|create .*image|make .*image|artwork|logo|wallpaper)\b/.test(prompt);
+    !hasCreative &&
+    !ARTIFACT_LEAD_WITH_TOPIC.test(prompt) &&
+    (IMAGE_NOUN_LEAD.test(prompt) ||
+      DRAW_VERBS.test(prompt) ||
+      (IMAGE_VERBS.test(prompt) && IMAGE_NOUNS.test(prompt)));
 
-  const hasPdfIntent =
-    /\b(pdf|make .*pdf|create .*pdf|generate .*pdf|report as pdf|pdf (report|document|file))\b/.test(prompt);
+  // ---- PDF / document intent ----
+  const hasPdfIntent = /\bpdf\b/i.test(prompt);
+  const hasDocIntent =
+    !hasCreative && CREATE_VERBS.test(prompt) && DOC_NOUNS.test(prompt);
 
+  // ---- PPT intent ----
   const hasPptIntent =
-    /\b(ppt|pptx|powerpoint|slides|slide deck|presentation|make .*deck|create (a )?(slide|presentation|deck))\b/.test(prompt);
+    !hasCreative &&
+    ((CREATE_VERBS.test(prompt) && PPT_NOUNS.test(prompt)) ||
+      PPT_LEAD.test(prompt));
 
+  // ---- Coding intent (web-UI capable) ----
+  const hasWebUiIntent = WEB_UI_NOUNS.test(prompt);
   const hasCodeIntent =
-    /\b(code|script|function|program|algorithm|implement|develop|build|create|make|write)\b/.test(prompt) ||
-    /\b(python|javascript|typescript|react|html|css|java|c\+\+|golang|rust|sql)\b/.test(prompt);
+    !hasCreative &&
+    !hasPptIntent &&
+    !hasDocIntent &&
+    !hasImageIntent &&
+    ((LANGUAGES.test(prompt) &&
+      (CODE_VERBS.test(prompt) || CODE_NOUNS.test(prompt) || hasWebUiIntent)) ||
+      (CODE_VERBS.test(prompt) && CODE_NOUNS.test(prompt)) ||
+      (hasWebUiIntent && CODE_VERBS.test(prompt)));
 
-  const hasWebUiIntent =
-    /\b(html|css|react|jsx|webpage|web page|website|web app|landing ?page|page|calculator|dashboard|todo|portfolio|interface|frontend|game|animation)\b/.test(prompt);
-
-  const hasSearchIntent =
-    /\b(search|lookup|find online|google|latest news|what('s| is) (new|happening)|trending|research online)\b/.test(prompt);
-
-  // 1. Explicit artifact requests take priority.
+  // ---- Route: explicit artifacts first, then search, falling back to chat. ----
   if (hasImageIntent) {
     targetAgent = "imageGen";
-  } else if (hasPdfIntent) {
+  } else if (hasPdfIntent || hasDocIntent) {
     targetAgent = "pdf";
   } else if (hasPptIntent) {
     targetAgent = "ppt";
-  } else if (hasCodeIntent && hasWebUiIntent) {
-    // e.g. "build a calculator in HTML" → coding + live preview
-    targetAgent = "coding";
   } else if (hasCodeIntent) {
-    // e.g. "write Python code" → coding (source code panel)
+    // e.g. "build a calculator in HTML" → coding + live preview
     targetAgent = "coding";
   } else if (hasSearchIntent) {
     targetAgent = "search";

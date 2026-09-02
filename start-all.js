@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import net from "net";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -69,6 +70,55 @@ console.log(`${colors.bright}${colors.cyan}
 `);
 console.log(`${colors.gray}Starting all 5 microservices concurrently...${colors.reset}\n`);
 
+// Check whether a TCP port is accepting connections.
+function isPortOpen(port, timeout = 500) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: "127.0.0.1", port, timeout });
+    const done = (ok) => {
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.on("connect", () => done(true));
+    socket.on("timeout", () => done(false));
+    socket.on("error", () => done(false));
+  });
+}
+
+// Poll until a service's port is listening (or timeout).
+async function waitForPort(port, label, timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await isPortOpen(port)) {
+      console.log(
+        `${colors.gray}[RUNNER] ${label} is ready on port ${port}${colors.reset}`
+      );
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  console.log(
+    `${colors.red}[RUNNER] ${label} did not become ready on port ${port}${colors.reset}`
+  );
+  return false;
+}
+
+// Print Dashboard Info
+function printBanner(allReady) {
+  console.log(`
+${colors.bright}${allReady ? colors.green : colors.yellow}====================================================================
+  ${allReady ? "🚀 ALL SERVICES STARTED SUCCESSFULLY!" : "⚠️  SOME SERVICES DID NOT BECOME READY - CHECK LOGS"}
+====================================================================${colors.reset}
+  ${colors.bright}👉 Web Application:${colors.reset}   ${colors.cyan}http://localhost:5173${colors.reset}
+  ${colors.bright}👉 API Gateway:${colors.reset}       ${colors.cyan}http://localhost:8000${colors.reset}
+  ${colors.bright}👉 Auth Service:${colors.reset}      ${colors.yellow}http://localhost:8001${colors.reset}
+  ${colors.bright}👉 Chat Service:${colors.reset}      ${colors.blue}http://localhost:8002${colors.reset}
+  ${colors.bright}👉 Agent Service:${colors.reset}     ${colors.magenta}http://localhost:8003${colors.reset}
+${colors.gray}--------------------------------------------------------------------
+  Press ${colors.bright}Ctrl + C${colors.reset}${colors.gray} to stop all services simultaneously.
+====================================================================${colors.reset}
+`);
+}
+
 const runningProcesses = [];
 
 function startService(service) {
@@ -115,25 +165,27 @@ function startService(service) {
   runningProcesses.push({ name: service.name, process: child });
 }
 
-// Start all services
-services.forEach(startService);
+// Startup orchestration:
+// 1. Start the backend services + frontend right away.
+// 2. Wait until AUTH / CHAT / AGENT ports are actually listening.
+// 3. Only then start the GATEWAY, so it never proxies to a service that is
+//    still booting (fixes ECONNREFUSED on the first request after startup).
+// 4. Print the dashboard banner once the gateway itself is ready.
+const gatewayService = services.find((s) => s.name === "GATEWAY");
+services.filter((s) => s.name !== "GATEWAY").forEach(startService);
 
-// Print Dashboard Info after short delay
-setTimeout(() => {
-  console.log(`
-${colors.bright}${colors.green}====================================================================
-  🚀 ALL SERVICES STARTED SUCCESSFULLY!
-====================================================================${colors.reset}
-  ${colors.bright}👉 Web Application:${colors.reset}   ${colors.cyan}http://localhost:5173${colors.reset}
-  ${colors.bright}👉 API Gateway:${colors.reset}       ${colors.cyan}http://localhost:8000${colors.reset}
-  ${colors.bright}👉 Auth Service:${colors.reset}      ${colors.yellow}http://localhost:8001${colors.reset}
-  ${colors.bright}👉 Chat Service:${colors.reset}      ${colors.blue}http://localhost:8002${colors.reset}
-  ${colors.bright}👉 Agent Service:${colors.reset}     ${colors.magenta}http://localhost:8003${colors.reset}
-${colors.gray}--------------------------------------------------------------------
-  Press ${colors.bright}Ctrl + C${colors.reset}${colors.gray} to stop all services simultaneously.
-====================================================================${colors.reset}
-`);
-}, 3000);
+(async () => {
+  const backendReady = await Promise.all([
+    waitForPort(8001, "AUTH"),
+    waitForPort(8002, "CHAT"),
+    waitForPort(8003, "AGENT"),
+  ]);
+
+  startService(gatewayService);
+  const gatewayReady = await waitForPort(8000, "GATEWAY", 30000);
+
+  printBanner(backendReady.every(Boolean) && gatewayReady);
+})();
 
 // Graceful cleanup on shutdown
 function cleanup() {

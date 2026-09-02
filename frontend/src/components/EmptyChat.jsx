@@ -5,7 +5,6 @@ import {
   FiFileText,
   FiSliders,
   FiImage,
-  FiMessageSquare,
   FiArrowUpRight,
 } from "react-icons/fi";
 import { HiSparkles } from "react-icons/hi2";
@@ -33,6 +32,13 @@ const SUGGESTIONS = [
     color: "from-purple-500/20 to-indigo-500/10 border-purple-500/30 text-purple-400",
   },
   {
+    icon: FiImage,
+    title: "Image Studio",
+    prompt: "Generate an image of a futuristic city skyline at sunset, cinematic lighting.",
+    tag: "Image Generation",
+    color: "from-pink-500/20 to-rose-500/10 border-pink-500/30 text-pink-400",
+  },
+  {
     icon: FiFileText,
     title: "PDF Report Blueprint",
     prompt: "Create a formal project specification document for a microservices architecture.",
@@ -45,23 +51,32 @@ export default function EmptyChat({ onSelectPrompt }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-full px-4 py-8 max-w-3xl mx-auto text-center">
       {/* Nexus AI Orb Glow */}
-      <div className="relative mb-6">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-xl shadow-indigo-500/25 ring-1 ring-white/20">
+      <div data-reveal className="relative mb-6">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-xl shadow-indigo-500/25 ring-1 ring-white/20 animate-float-slow">
           <HiSparkles className="w-8 h-8 text-white animate-pulse" />
         </div>
         <div className="absolute -inset-2 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-3xl blur-lg opacity-30 -z-10 animate-tilt" />
       </div>
 
       {/* Hero Title */}
-      <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white mb-2">
+      <h1
+        data-reveal
+        style={{ transitionDelay: "90ms" }}
+        className="text-2xl md:text-3xl font-bold tracking-tight text-white mb-2"
+      >
         What would you like to build with{" "}
-        <span className="bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400 bg-clip-text text-transparent">
+        <span className="shimmer-text bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400 bg-clip-text text-transparent">
           Nexus AI
         </span>
         ?
       </h1>
-      <p className="text-sm text-slate-400 max-w-lg mb-8">
-        Your unified agent system with autonomous routing for live web search, code generation, presentation decks, and document design.
+      <p
+        data-reveal
+        style={{ transitionDelay: "160ms" }}
+        className="text-sm text-slate-400 max-w-lg mb-8"
+      >
+        Your unified agent system with autonomous routing for live web search, code generation,
+        presentation decks, image studio, and document design.
       </p>
 
       {/* Suggestions Grid */}
@@ -71,8 +86,10 @@ export default function EmptyChat({ onSelectPrompt }) {
           return (
             <button
               key={idx}
+              data-reveal
+              style={{ transitionDelay: `${220 + idx * 70}ms` }}
               onClick={() => onSelectPrompt(item.prompt)}
-              className="group relative flex flex-col p-4 rounded-2xl bg-[#121622] hover:bg-[#161c2d] border border-white/[0.07] hover:border-indigo-500/40 transition-all duration-200 shadow-sm cursor-pointer"
+              className="group relative flex flex-col p-4 rounded-2xl bg-[#121622] hover:bg-[#161c2d] border border-white/[0.07] hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-0.5 transition-all duration-200 shadow-sm cursor-pointer"
             >
               <div className="flex items-center justify-between w-full mb-2">
                 <div className="flex items-center gap-2">
@@ -88,6 +105,11 @@ export default function EmptyChat({ onSelectPrompt }) {
               <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
                 {item.prompt}
               </p>
+              <span
+                className={`mt-2.5 self-start text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${item.color}`}
+              >
+                {item.tag}
+              </span>
             </button>
           );
         })}

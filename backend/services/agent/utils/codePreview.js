@@ -38,8 +38,10 @@ function inferFilename(language, index) {
 }
 
 const REACT_HINT = /\b(react|jsx)\b/i;
+// Broad web-UI intent hint — also covers e-commerce / storefront requests so
+// they get the live iframe preview instead of a plain source-code view.
 const WEB_UI_HINT =
-  /\b(html|css|react|jsx|frontend|webpage|web page|website|web app|landing ?page|calculator|dashboard|todo|portfolio|interface|spa|component|ui)\b/i;
+  /\b(html|css|react|jsx|frontend|webpage|web page|website|web app|landing ?page|calculator|dashboard|todo|to-?do|portfolio|interface|spa|component|ui|e-?commerce|shop|store|shopping|cart|checkout|product|homepage|home page|gallery|profile)\b/i;
 
 /** Decide whether the produced code should get a live browser preview. */
 export function classifyCodeResponse(prompt, blocks) {

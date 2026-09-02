@@ -13,6 +13,13 @@ based on the user's request. Use:
 - Bullet points, tables, and short paragraphs
 - A concluding section
 
+Content rules:
+- Stay strictly on the topic the user asked about; cover it in depth.
+- Write ONLY in English/Latin characters. Do NOT use emoji, arrows (->), math
+  symbols, or any non-Latin script - the PDF font cannot render them.
+- If the user's request is in another language, still answer in Latin script
+  with transliterated or translated content.
+
 Output ONLY the markdown document content. Do not describe the process.`;
 
 const TITLE_EXTRACTOR = `Extract a short document title (max 8 words) from this PDF request.
@@ -44,7 +51,9 @@ export async function pdfNode(state) {
       prompt: state.prompt,
       history,
       temperature: 0.2,
-      maxOutputTokens: 64,
+      // Reasoning models need headroom for their internal reasoning tokens;
+      // a tiny budget (e.g. 64) yields empty content and the call "fails".
+      maxOutputTokens: 512,
     });
     const title = titleJson?.title || state.prompt.slice(0, 60);
 

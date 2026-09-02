@@ -5,7 +5,7 @@
 import { generateContent } from "./llm.js";
 
 /**
- * Ask the LLM for a JSON object. Returns the parsed object or null.
+ * Ask the LLM for a JSON value. Returns the parsed object/array or null.
  */
 export async function generateStructuredJson({
   systemPrompt,
@@ -15,7 +15,7 @@ export async function generateStructuredJson({
   maxOutputTokens = 2048,
 }) {
   const raw = await generateContent({
-    systemPrompt: `${systemPrompt}\n\nReturn ONLY a valid JSON object. No markdown fences, no commentary.`,
+    systemPrompt: `${systemPrompt}\n\nReturn ONLY a single valid JSON value (object or array). No markdown fences, no commentary.`,
     prompt,
     history,
     temperature,
@@ -26,8 +26,9 @@ export async function generateStructuredJson({
 }
 
 /**
- * Extract a JSON object from arbitrary model text (strips markdown fences,
- * finds the outermost { ... } region).
+ * Extract a JSON value (object OR array) from arbitrary model text.
+ * Handles markdown fences, leading/trailing commentary, top-level arrays
+ * and objects. Returns the parsed value or null.
  */
 export function extractJson(text) {
   if (!text || typeof text !== "string") return null;
@@ -35,13 +36,34 @@ export function extractJson(text) {
   const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
   const candidate = fenced ? fenced[1] : text;
 
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) return null;
-
+  // 1) The whole string may already be clean JSON.
   try {
-    return JSON.parse(candidate.slice(start, end + 1));
+    return JSON.parse(candidate.trim());
   } catch {
-    return null;
+    /* fall through */
   }
+
+  // 2) Outermost object { ... } (e.g. model added commentary around it).
+  const objStart = candidate.indexOf("{");
+  const objEnd = candidate.lastIndexOf("}");
+  if (objStart !== -1 && objEnd > objStart) {
+    try {
+      return JSON.parse(candidate.slice(objStart, objEnd + 1));
+    } catch {
+      /* fall through */
+    }
+  }
+
+  // 3) Outermost array [ ... ] (e.g. a slide deck returned as a JSON array).
+  const arrStart = candidate.indexOf("[");
+  const arrEnd = candidate.lastIndexOf("]");
+  if (arrStart !== -1 && arrEnd > arrStart) {
+    try {
+      return JSON.parse(candidate.slice(arrStart, arrEnd + 1));
+    } catch {
+      /* fall through */
+    }
+  }
+
+  return null;
 }
